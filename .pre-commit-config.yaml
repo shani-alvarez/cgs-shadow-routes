@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks: [{ id: black }]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks: [{ id: ruff, args: ["--fix"] }]
+  - repo: https://github.com/mwouts/jupytext
+    rev: v1.16.2
+    hooks:
+      - id: jupytext
+        files: notebooks/.*\.ipynb
+        args: ["--to", "py:percent"]

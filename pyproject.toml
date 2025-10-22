@@ -1,0 +1,59 @@
+[project]
+name = "shadowroutes"
+version = "0.1.0"
+description = "Crime & migration analysis"
+authors = [{ name = "shanieneida", email = "shanieneida@gmail.com" }]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+  "pandas>=2.3.3,<3.0.0",
+  "pyarrow>=21.0.0,<22.0.0",
+  "matplotlib>=3.10.7,<4.0.0",
+  "plotly>=6.3.1,<7.0.0",
+  "folium>=0.20.0,<0.21.0",
+  "pydantic>=2.12.3,<3.0.0",
+  "pydantic-settings>=2.11.0,<3.0.0",
+  "pyyaml>=6.0.3,<7.0.0",
+  "jupyter>=1.1.1,<2.0.0",
+  "jupyterlab>=4.4.9,<5.0.0",
+  "ipykernel>=7.0.1,<8.0.0",
+  "tqdm>=4.67.1,<5.0.0",
+  "tenacity>=9.1.2,<10.0.0"
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.14.1,<0.15.0",
+  "black>=25.9.0,<26.0.0",
+  "pre-commit>=4.3.0,<5.0.0",
+  "jupytext>=1.18.1,<2.0.0",
+  "nbdime>=4.0.2,<5.0.0",
+  "pytest>=8.4.2,<9.0.0",
+  "nbstripout>=0.7.1,<0.8.0"
+]
+
+[tool.poetry]
+packages = [{ include = "shadowroutes", from = "src" }]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E203", "E266", "E501"]
+# per-file-ignores = { "notebooks/*.py" = ["E402"] }  # example if needed
+
+# (Optional) To handle formatting too, tweak:
+# [tool.ruff.format]
+# quote-style = "double"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
