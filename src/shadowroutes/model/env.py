@@ -7,6 +7,7 @@ import pandas as pd
 
 def build_env_graph(munis_df: pd.DataFrame, edges_df: pd.DataFrame) -> nx.Graph:
     """
+    Creates the static set up of the environment.
     munis_df: columns ['muni_id','state','name','pop','poverty','mining_idx',
                       'prot_idx','collusion_idx']
     edges_df: columns ['src','dst','road_cost']
@@ -33,10 +34,10 @@ def build_env_graph(munis_df: pd.DataFrame, edges_df: pd.DataFrame) -> nx.Graph:
     return G
 
 
-def update_node_exogenous(G: nx.Graph, t: int, crime_panel: pd.DataFrame):
+def update_node_exogenous(G, t: int, crime_panel: pd.DataFrame):
     """
-    Apply monthly exogenous updates to each node from your SESNSP panel if you have it.
-    crime_panel columns: ['t','muni_id','extortion','kidnapping','homicide','drugs']
+    Apply monthly exogenous updates to each node from the crime panel (SESNSP).
+    crime_panel columns: ['t','muni_id','extortion','kidnapping','homicide','drug']
     """
     if crime_panel is None:
         return
@@ -47,9 +48,11 @@ def update_node_exogenous(G: nx.Graph, t: int, crime_panel: pd.DataFrame):
             G.nodes[n]["extortion"] = float(r.get("extortion", 0.0))
             G.nodes[n]["kidnapping"] = float(r.get("kidnapping", 0.0))
             G.nodes[n]["drugs"] = float(r.get("drugs", 0.0))
-            # optional: compute violence as a weighted mix
+            G.nodes[n]["homicide"] = float(r.get("homicide", 0.0))
+
             G.nodes[n]["violence"] = (
-                0.5 * G.nodes[n]["extortion"]
+                1.0 * G.nodes[n]["homicide"]
                 + 0.8 * G.nodes[n]["kidnapping"]
+                + 0.7 * G.nodes[n]["extortion"]
                 + 0.3 * G.nodes[n]["drugs"]
             )
