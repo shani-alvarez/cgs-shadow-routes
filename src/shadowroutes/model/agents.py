@@ -139,6 +139,10 @@ class CivilianAgent(Agent):
         return 0.35 * h + 0.40 * e + 0.25 * k
 
     def step(self):
+        # If already displaced out of region, do nothing
+        if self.muni_id == "SINK":
+            return
+
         G = self.model.G
         node = G.nodes[self.muni_id]
 
@@ -158,8 +162,14 @@ class CivilianAgent(Agent):
             if dest is not None and dest != self.muni_id:
                 # register flow for stats
                 self.model.register_flow(self.muni_id, dest)
-                self.muni_id = dest
-                self.displaced = True
+                if dest == "SINK":
+                    # Agent exits the modeled region
+                    self.muni_id = "SINK"
+                    self.displaced = True
+                    return
+                else:
+                    self.muni_id = dest
+                    self.displaced = True
 
     def _node_violence_for_dest(self, node_attrs: dict, muni_id: Hashable) -> float:
         """
