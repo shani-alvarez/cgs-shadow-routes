@@ -44,10 +44,8 @@ Project developed by the following team within the Complexity Global School 2025
 
 ### Lead contributors
 
-- Grecia Arellano Embriz
-- Hatice Uyanik
-- Mario Mercado Mendoza
 - Shaní Alvarez Hernández
+- Grecia Arellano Embriz
 
 ---
 
