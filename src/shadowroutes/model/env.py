@@ -5,54 +5,94 @@ import networkx as nx
 import pandas as pd
 
 
-def build_env_graph(munis_df: pd.DataFrame, edges_df: pd.DataFrame) -> nx.Graph:
+def build_env_graph(munis_df: pd.DataFrame, edges_df: None) -> nx.Graph:
     """
-    Creates the static set up of the environment.
-    munis_df: columns ['muni_id','state','name','pop','poverty','mining_idx',
-                      'prot_idx','collusion_idx']
-    edges_df: columns ['src','dst','road_cost']
+    Build the environment graph from the municipal dataframe.
+
+    Parameters
+    ----------
+    munis_df : pd.DataFrame
+        One row per municipality, with columns:
+        - node_id
+        - muni_id
+        - state_id
+        - municipality
+        - state
+        - pop_total
+        - prot_idx
+        - mining_idx
+        - collusion_idx
+    edges : iterable of (u, v), optional
+        Pairs of node_ids indicating adjacency. If None, graph starts
+        with nodes only (no edges).
+
+    Returns
+    -------
+    G : networkx.Graph
+        Graph where each node is a municipality with static attributes.
     """
     G = nx.Graph()
-    for _, r in munis_df.iterrows():
+
+    # Adds nodes with attributes
+    valid_nodes = set()
+    for _, row in munis_df.iterrows():
+        node = row["node_id"]
+        valid_nodes.add(node)
+
         G.add_node(
-            int(r["muni_id"]),
-            state=r["state"],
-            name=r["name"],
-            pop=int(r["pop"]),
-            poverty=float(r.get("poverty", 0.0)),
-            mining_idx=float(r.get("mining_idx", 0.0)),
-            prot_idx=float(r.get("prot_idx", 0.0)),  # enforcement/protection
-            collusion_idx=float(r.get("collusion_idx", 0.0)),
-            # dynamic attributes updated each step:
-            violence=0.0,
-            extortion=0.0,
-            kidnapping=0.0,
-            drugs=0.0,
+            node,
+            muni_id=row["muni_id"],
+            state_id=row["state_id"],
+            state=row["state"],
+            municipality=row["municipality"],
+            pop_total=row["pop_total"],
+            prot_idx=row["prot_idx"],
+            mining_idx=row["mining_idx"],
+            collusion_idx=row["collusion_idx"],
+            # Dynamic attributes initialized to 0 (will be updated from crime_panel)
+            extortion_rate=0.0,
+            homicide_rate=0.0,
+            drug_dealing_rate=0.0,
+            kidnapping_rate=0.0,
+            human_trafficking_rate=0.0,
         )
-    for _, e in edges_df.iterrows():
-        G.add_edge(int(e["src"]), int(e["dst"]), road_cost=float(e.get("road_cost", 1.0)))
+
+    # Add edges only if both ends are valid nodes
+    if edges_df is not None:
+        for _, row in edges_df.iterrows():
+            u = row["source"]
+            v = row["target"]
+            if (u in valid_nodes) and (v in valid_nodes):
+                G.add_edge(u, v)
+
     return G
 
 
-def update_node_exogenous(G, t: int, crime_panel: pd.DataFrame):
+def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
     """
-    Apply monthly exogenous updates to each node from the crime panel (SESNSP).
-    crime_panel columns: ['t','muni_id','extortion','kidnapping','homicide','drug']
-    """
-    if crime_panel is None:
-        return
-    frame = crime_panel[crime_panel["t"] == t]
-    for _, r in frame.iterrows():
-        n = int(r["muni_id"])
-        if n in G:
-            G.nodes[n]["extortion"] = float(r.get("extortion", 0.0))
-            G.nodes[n]["kidnapping"] = float(r.get("kidnapping", 0.0))
-            G.nodes[n]["drugs"] = float(r.get("drugs", 0.0))
-            G.nodes[n]["homicide"] = float(r.get("homicide", 0.0))
+    Update node attributes in the graph using a crime panel.
 
-            G.nodes[n]["violence"] = (
-                1.0 * G.nodes[n]["homicide"]
-                + 0.8 * G.nodes[n]["kidnapping"]
-                + 0.7 * G.nodes[n]["extortion"]
-                + 0.3 * G.nodes[n]["drugs"]
-            )
+    Parameters
+    ----------
+    G : networkx.Graph
+        Environment graph with node attributes including muni_id.
+    crime_panel : pd.DataFrame
+        DataFrame indexed by muni_id with columns:
+        - extortion_rate
+        - homicide_rate
+        - drug_dealing_rate
+        - kidnapping_rate
+        - human_trafficking_rate
+    """
+    for data in G.nodes(data=True):
+        muni_id = data["muni_id"]
+        if muni_id is None:
+            continue  # orphan node
+
+        if muni_id in crime_panel.index:
+            row = crime_panel.loc[muni_id]
+            data["extortion_rate"] = float(row["extortion_rate"])
+            data["homicide_rate"] = float(row["homicide_rate"])
+            data["drug_dealing_rate"] = float(row["drug_dealing_rate"])
+            data["kidnapping_rate"] = float(row["kidnapping_rate"])
+            data["human_trafficking_rate"] = float(row["human_trafficking_rate"])
