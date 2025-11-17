@@ -84,10 +84,10 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
         - kidnapping_rate
         - human_trafficking_rate
     """
-    for data in G.nodes(data=True):
-        muni_id = data["muni_id"]
+    for _, data in G.nodes(data=True):
+        muni_id = data.get("muni_id")
         if muni_id is None:
-            continue  # orphan node
+            continue  # orphan node or sink
 
         if muni_id in crime_panel.index:
             row = crime_panel.loc[muni_id]
@@ -96,6 +96,13 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
             data["drug_dealing_rate"] = float(row["drug_dealing_rate"])
             data["kidnapping_rate"] = float(row["kidnapping_rate"])
             data["human_trafficking_rate"] = float(row["human_trafficking_rate"])
+        else:
+            # optional: keep 0s if no data
+            data["extortion_rate"] = 0.0
+            data["homicide_rate"] = 0.0
+            data["drug_dealing_rate"] = 0.0
+            data["kidnapping_rate"] = 0.0
+            data["human_trafficking_rate"] = 0.0
 
 
 def get_crime_slice(crime_panel: pd.DataFrame, t: int) -> pd.DataFrame:
