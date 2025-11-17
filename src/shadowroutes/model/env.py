@@ -55,6 +55,7 @@ def build_env_graph(munis_df: pd.DataFrame, edges_df: None) -> nx.Graph:
             drug_dealing_rate=0.0,
             kidnapping_rate=0.0,
             human_trafficking_rate=0.0,
+            violence=0.0,  # synthetic risk field
         )
 
     # Add edges only if both ends are valid nodes
@@ -96,13 +97,22 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
             data["drug_dealing_rate"] = float(row["drug_dealing_rate"])
             data["kidnapping_rate"] = float(row["kidnapping_rate"])
             data["human_trafficking_rate"] = float(row["human_trafficking_rate"])
+            # Composite baseline violence (PoC weights)
+            v = (
+                0.4 * data["homicide_rate"]
+                + 0.25 * data["extortion_rate"]
+                + 0.2 * data["kidnapping_rate"]
+                + 0.1 * data["drug_dealing_rate"]
+                + 0.05 * data["human_trafficking_rate"]
+            )
+            data["violence"] = v
         else:
-            # optional: keep 0s if no data
             data["extortion_rate"] = 0.0
             data["homicide_rate"] = 0.0
             data["drug_dealing_rate"] = 0.0
             data["kidnapping_rate"] = 0.0
             data["human_trafficking_rate"] = 0.0
+            data["violence"] = 0.0
 
 
 def get_crime_slice(crime_panel: pd.DataFrame, t: int) -> pd.DataFrame:
