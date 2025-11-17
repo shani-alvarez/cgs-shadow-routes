@@ -96,3 +96,39 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
             data["drug_dealing_rate"] = float(row["drug_dealing_rate"])
             data["kidnapping_rate"] = float(row["kidnapping_rate"])
             data["human_trafficking_rate"] = float(row["human_trafficking_rate"])
+
+
+def get_crime_slice(crime_panel: pd.DataFrame, t: int) -> pd.DataFrame:
+    """
+    Return crime rates for a given time index t, indexed by muni_id.
+
+    Parameters
+    ----------
+    crime_panel : pd.DataFrame
+        Must contain columns:
+        - t
+        - muni_id
+        - extortion_rate
+        - homicide_rate
+        - drug_dealing_rate
+        - kidnapping_rate
+        - human_trafficking_rate
+    t : int
+        Time index used in the panel.
+
+    Returns
+    -------
+    slice_df : pd.DataFrame
+        Indexed by muni_id with crime rate columns.
+    """
+    slice_df = crime_panel.loc[crime_panel["t"] == t].set_index("muni_id")[
+        [
+            "extortion_rate",
+            "homicide_rate",
+            "drug_dealing_rate",
+            "kidnapping_rate",
+            "human_trafficking_rate",
+        ]
+    ]
+
+    return slice_df

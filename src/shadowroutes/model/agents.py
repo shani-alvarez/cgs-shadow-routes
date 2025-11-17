@@ -2,16 +2,31 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Hashable
+from typing import Any
 
 from mesa import Agent
 
 
 class OCGAgent(Agent):
+    """
+    Organized Crime Group agent.
+
+    - Lives on a municipality node (muni_id).
+    - Evaluates local and neighboring municipalities based on:
+        * drug_dealing_rate
+        * extortion_rate
+        * mining_idx
+        * prot_idx (state capacity)
+        * collusion_idx (state-crime embeddedness)
+    - Can escalate violence (by bumping homicide_rate) and expand to neighbors.
+    """
+
     def __init__(
         self,
-        unique_id,
-        model,
-        muni_id: int,
+        unique_id: Hashable,
+        model: Any,
+        muni_id: Hashable,
         violence_propensity: float = 0.4,
         expansion_tendency: float = 0.2,
     ):
@@ -22,101 +37,164 @@ class OCGAgent(Agent):
         self.resources = 1.0  # crude revenue stock
         self.alive = True
 
+    def _local_payoff(self, node_attrs: dict) -> float:
+        """
+        Heuristic payoff for a municipality, based on rents and markets.
+        """
+        return (
+            0.6 * node_attrs.get("drug_dealing_rate", 0.0)
+            + 0.5 * node_attrs.get("extortion_rate", 0.0)
+            + 0.4 * self.model.mining_weight * node_attrs.get("mining_idx", 0.0)
+        )
+
+    def _enforcement_risk(self, node_attrs: dict) -> float:
+        """
+        Risk from state presence. High protection and low collusion = high risk.
+        """
+        prot = node_attrs.get("prot_idx", 0.0)
+        coll = node_attrs.get("collusion_idx", 0.0)
+        return prot * (1.0 - coll)
+
     def step(self):
         if not self.alive:
             return
+
         G = self.model.G
         node = G.nodes[self.muni_id]
 
         # 1) Assess local payoff and risk
-        profit = (
-            0.6 * node["drugs"]
-            + 0.5 * node["extortion"]
-            + 0.4 * self.model.mining_weight * node["mining_idx"]
-        )
-        enforcement = node["prot_idx"] * (
-            1.0 - node["collusion_idx"]
-        )  # protection reduces you, collusion increases you
-        rivals = self.model.ocg_presence_count(self.muni_id) - 1
+        profit = self._local_payoff(node)
+        enforcement = self._enforcement_risk(node)
+
+        rivals = max(self.model.ocg_presence_count(self.muni_id) - 1, 0)
         contest_risk = 0.3 * rivals
 
-        # 2) Decide violence level (very simple rule)
-        escalate = random.random() < (
-            self.violence_propensity + 0.2 * contest_risk - 0.2 * enforcement
-        )
-        if escalate:
-            node["violence"] += self.model.v_escalation
+        # 2) Decide whether to escalate violence (very simple rule)
+        p_escalate = self.violence_propensity + 0.2 * contest_risk - 0.2 * enforcement
+        if random.random() < max(min(p_escalate, 1.0), 0.0):
+            # We bump homicide_rate as a proxy for lethal violence escalation
+            current_hom = node.get("homicide_rate", 0.0)
+            node["homicide_rate"] = max(current_hom + self.model.v_escalation, 0.0)
 
         # 3) Consider expansion to a neighbor
         if random.random() < self.expansion_tendency:
             candidates = list(G.neighbors(self.muni_id))
             if candidates:
-                # choose neighbor with best payoff - risk
                 scored = []
                 for nb in candidates:
                     n = G.nodes[nb]
-                    payoff = (
-                        0.6 * n["drugs"]
-                        + 0.5 * n["extortion"]
-                        + 0.4 * self.model.mining_weight * n["mining_idx"]
-                    )
-                    risk = n["prot_idx"] * (1.0 - n["collusion_idx"])
+                    payoff = self._local_payoff(n)
+                    risk = self._enforcement_risk(n)
                     scored.append((payoff - risk, nb))
+
                 scored.sort(reverse=True)
-                best_nb = scored[0][1]
-                # stochastic move if it beats current by margin
-                if scored[0][0] > (profit - enforcement) + 0.1:
-                    # "enter" neighbor = spawn light presence
-                    self.model.tag_ocg_presence(
-                        best_nb, self
-                    )  # registers presence for contestation
-                    # 50% chance to actually move headquarters
+                best_score, best_nb = scored[0]
+
+                # Compare best neighbor to current node with a small margin
+                current_score = profit - enforcement
+                if best_score > current_score + 0.1:
+                    # Register presence (for contestation / civilian risk)
+                    self.model.tag_ocg_presence(best_nb, self)
+
+                    # 50% chance we actually move our "headquarters" to that node
                     if random.random() < 0.5:
                         self.muni_id = best_nb
 
 
 class CivilianAgent(Agent):
+    """
+    Civilian (household / population block) agent.
+
+    - Lives on a municipality node (muni_id).
+    - Reads local crime + governance signals and decides to stay or move.
+    - If it moves to SINK, it's treated as displaced out of the modeled region.
+    """
+
     def __init__(
-        self, unique_id, model, muni_id: int, mobility: float = 1.0, risk_threshold: float = 1.0
+        self,
+        unique_id: Hashable,
+        model: Any,
+        muni_id: Hashable,
+        mobility: float = 1.0,
+        risk_threshold: float = 1.0,
     ):
         super().__init__(unique_id, model)
         self.muni_id = muni_id
-        self.mobility = mobility  # ability to move (income, transport)
+        self.mobility = mobility  # ability to move (income, networks, transport)
         self.risk_threshold = risk_threshold  # tolerance to violence
         self.displaced = False
+
+    def _base_violence(self, node_attrs: dict) -> float:
+        """
+        Aggregate local 'violence' as a function of observed crime rates.
+
+        We weight extortion and kidnapping slightly higher than homicide
+        to reflect their strong link to chronic threats and forced displacement.
+        """
+        h = node_attrs.get("homicide_rate", 0.0)
+        e = node_attrs.get("extortion_rate", 0.0)
+        k = node_attrs.get("kidnapping_rate", 0.0)
+
+        # Simple, monotone weights; subject to later calibration
+        return 0.35 * h + 0.40 * e + 0.25 * k
 
     def step(self):
         G = self.model.G
         node = G.nodes[self.muni_id]
-        # perceived risk: violence amplified by contestation and weak protection
-        rivals = self.model.ocg_presence_count(self.muni_id)
-        protection = node["prot_idx"] * (1.0 - node["collusion_idx"])
-        perceived_risk = node["violence"] + 0.4 * (rivals - 1) - 0.3 * protection
 
-        if perceived_risk > self.risk_threshold:
-            # evaluate neighbors + optional sink
+        # local violence signal from crime rates (plus any OCG escalation)
+        base_v = self._base_violence(node)
+
+        # contestation: more groups -> more risk
+        rivals = max(self.model.ocg_presence_count(self.muni_id) - 1, 0)
+
+        # effective state protection: high prot_idx, low collusion
+        protection = node.get("prot_idx", 0.0) * (1.0 - node.get("collusion_idx", 0.0))
+
+        perceived_risk = base_v + 0.4 * rivals - 0.3 * protection
+
+        if perceived_risk > self.risk_threshold and random.random() < self.mobility:
             dest = self.choose_destination()
             if dest is not None and dest != self.muni_id:
+                # register flow for stats
                 self.model.register_flow(self.muni_id, dest)
                 self.muni_id = dest
                 self.displaced = True
 
+    def _node_violence_for_dest(self, node_attrs: dict, muni_id: Hashable) -> float:
+        """
+        Violence component used when scoring destinations.
+        Uses the same crime-based index plus contestation.
+        """
+        base_v = self._base_violence(node_attrs)
+        rivals = max(self.model.ocg_presence_count(muni_id) - 1, 0)
+        return base_v + 0.3 * rivals
+
     def choose_destination(self):
         G = self.model.G
         candidates = list(G.neighbors(self.muni_id))
+
         if self.model.enable_sink:
-            candidates += ["SINK"]  # outside region
-        # score each candidate
+            candidates.append("SINK")  # outside region
+
         best, best_score = self.muni_id, -1e9
+
         for c in candidates:
             if c == "SINK":
-                score = 0.3  # constant outside option
+                # Outside option: constant, relatively safe but costly.
+                # You can tune this later.
+                score = 0.3
             else:
                 n = G.nodes[c]
-                safety = -n["violence"] - 0.3 * (self.model.ocg_presence_count(c) - 1)
-                capacity = n["prot_idx"]
-                road = 1.0  # stub; could use edge cost
-                score = safety + 0.2 * capacity - 0.05 * road
+                violence = self._node_violence_for_dest(n, c)
+                capacity = n.get("prot_idx", 0.0)
+                # road cost is just a stub; could use edge attribute if you want
+                road_cost = 1.0
+
+                # safer + more capacity = more attractive
+                score = -violence + 0.2 * capacity - 0.05 * road_cost
+
             if score > best_score:
                 best, best_score = c, score
+
         return best
