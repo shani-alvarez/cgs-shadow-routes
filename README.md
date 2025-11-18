@@ -1,6 +1,6 @@
 # Shadow Routes: Mapping the Nexus of Crime and Migration in Mexico
 
-This working paper was developed during the 2025 Complexity Global School for Emerging Political Economies (Santa Fe Institute). It explores the dynamics of forced internal displacement in Mexico through the lens of criminal violence, illicit economies, and institutional weakness. Using an agent-based model, the study examines how households respond to escalating criminal governance and how mobility patterns emerge across regions affected by organized crime.
+This project was developed during the 2025 Complexity Global School for Emerging Political Economies (Santa Fe Institute). It explores the dynamics of forced internal displacement in Mexico through the lens of criminal violence, illicit economies, and institutional weakness. Using an agent-based model, the study examines how households respond to escalating criminal governance and how mobility patterns emerge across regions affected by organized crime.
 
 This repository contains the analysis scripts, notebooks, and documentation that support the empirical component of the project.
 
