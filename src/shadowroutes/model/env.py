@@ -19,12 +19,12 @@ def build_env_graph(munis_df: pd.DataFrame, edges_df: None) -> nx.Graph:
         - municipality
         - state
         - pop_total
-        - prot_idx
+        - prot_idx          # already rescaled to [0, 1] upstream
         - mining_idx
         - collusion_idx
-    edges : iterable of (u, v), optional
-        Pairs of node_ids indicating adjacency. If None, graph starts
-        with nodes only (no edges).
+    edges_df : pd.DataFrame or None
+        DataFrame with columns 'source', 'target' for adjacency.
+        If None, graph starts with nodes only (no edges).
 
     Returns
     -------
@@ -33,7 +33,6 @@ def build_env_graph(munis_df: pd.DataFrame, edges_df: None) -> nx.Graph:
     """
     G = nx.Graph()
 
-    # Adds nodes with attributes
     valid_nodes = set()
     for _, row in munis_df.iterrows():
         node = row["node_id"]
@@ -49,16 +48,15 @@ def build_env_graph(munis_df: pd.DataFrame, edges_df: None) -> nx.Graph:
             prot_idx=row["prot_idx"],
             mining_idx=row["mining_idx"],
             collusion_idx=row["collusion_idx"],
-            # Dynamic attributes initialized to 0 (will be updated from crime_panel)
+            # Dynamic attributes, filled each tick from crime_panel
             extortion_rate=0.0,
             homicide_rate=0.0,
             drug_dealing_rate=0.0,
             kidnapping_rate=0.0,
             human_trafficking_rate=0.0,
-            violence=0.0,  # synthetic risk field
+            violence=0.0,  # normalized composite violence index [0, 1]
         )
 
-    # Add edges only if both ends are valid nodes
     if edges_df is not None:
         for _, row in edges_df.iterrows():
             u = row["source"]
@@ -84,6 +82,7 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
         - drug_dealing_rate
         - kidnapping_rate
         - human_trafficking_rate
+        - violence_idx   # normalized [0, 1], precomputed upstream
     """
     for _, data in G.nodes(data=True):
         muni_id = data.get("muni_id")
@@ -97,15 +96,7 @@ def update_env_from_crime(G: nx.Graph, crime_panel: pd.DataFrame):
             data["drug_dealing_rate"] = float(row["drug_dealing_rate"])
             data["kidnapping_rate"] = float(row["kidnapping_rate"])
             data["human_trafficking_rate"] = float(row["human_trafficking_rate"])
-            # Composite baseline violence (PoC weights)
-            v = (
-                0.4 * data["homicide_rate"]
-                + 0.25 * data["extortion_rate"]
-                + 0.2 * data["kidnapping_rate"]
-                + 0.1 * data["drug_dealing_rate"]
-                + 0.05 * data["human_trafficking_rate"]
-            )
-            data["violence"] = v
+            data["violence"] = float(row["violence_idx"])
         else:
             data["extortion_rate"] = 0.0
             data["homicide_rate"] = 0.0
@@ -130,6 +121,7 @@ def get_crime_slice(crime_panel: pd.DataFrame, t: int) -> pd.DataFrame:
         - drug_dealing_rate
         - kidnapping_rate
         - human_trafficking_rate
+        - violence_idx
     t : int
         Time index used in the panel.
 
@@ -145,6 +137,7 @@ def get_crime_slice(crime_panel: pd.DataFrame, t: int) -> pd.DataFrame:
             "drug_dealing_rate",
             "kidnapping_rate",
             "human_trafficking_rate",
+            "violence_idx",
         ]
     ]
 

@@ -1,7 +1,7 @@
 # run.py
 
 import pandas as pd
-from abm import Model
+from model import Model
 
 # -----------------------------------------------------
 # 1. Load preprocessed datasets
@@ -9,7 +9,6 @@ from abm import Model
 
 df_munis = pd.read_csv("data/processed/df_munis.csv", dtype={"muni_id": str})
 edges_df = pd.read_csv("data/processed/edges.csv", dtype={"source": str, "target": str})
-
 crime_panel = pd.read_csv("data/processed/crime_panel.csv", dtype={"muni_id": str})
 
 # Ensure index consistency
@@ -50,7 +49,7 @@ model.run()
 # -----------------------------------------------------
 
 df_out = model.datacollector.get_model_vars_dataframe()
-df_out.to_csv("outputs/model_timeseries.csv", index=False)
+df_out.to_csv("outputs/abm_model_timeseries.csv", index=False)
 
 print("Simulation finished!")
 print(df_out.head())
